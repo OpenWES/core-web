@@ -4,11 +4,9 @@ import io.vertx.core.Handler;
 import io.vertx.ext.web.RoutingContext;
 
 /**
- *
- * @author Deadpool {@literal (locngo@fortna.com)}
- * @since Apr 7, 2020
- * @version 1.0.0
- *
+ * 
+ * @author xuanloc0511@gmail.com
+ * 
  */
 public class NoTimeOutHandler implements Handler<RoutingContext>{
 
