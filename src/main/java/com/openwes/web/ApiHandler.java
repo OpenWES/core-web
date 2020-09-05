@@ -1,7 +1,13 @@
 package com.openwes.web;
 
+import static com.openwes.core.IOC.init;
+import com.openwes.core.Transaction;
+import com.openwes.core.logging.LogContext;
 import com.openwes.core.utils.ClassLoadException;
 import com.openwes.core.utils.ClassUtils;
+import com.openwes.core.utils.ClockService;
+import com.openwes.core.utils.ClockWatch;
+import com.openwes.core.utils.Validate;
 import io.netty.handler.codec.http.HttpResponseStatus;
 import io.vertx.core.Handler;
 import io.vertx.ext.web.RoutingContext;
@@ -21,6 +27,7 @@ class ApiHandler implements Handler<RoutingContext> {
     private final static Logger LOGGER = LoggerFactory.getLogger(ApiHandler.class);
     private final String path;
     private final String httpHandler;
+    private final Transaction transaction = init(Transaction.class);
 
     private ApiHandler(String path, String httpHandler) {
         this.path = path;
@@ -38,7 +45,7 @@ class ApiHandler implements Handler<RoutingContext> {
                     LOGGER.error("Connection of request {} get error ", path, e);
                 });
 
-        HttpHandler handler = null;
+        HttpHandler handler;
         try {
             handler = ClassUtils.object(httpHandler);
         } catch (ClassLoadException ex) {
@@ -51,8 +58,10 @@ class ApiHandler implements Handler<RoutingContext> {
         }
 
         String messageId = ctx.request().getHeader("Message-ID");
+        ClockWatch cw = ClockService.newClockWatch();
         try {
-            MDC.put("txid", messageId);
+            transaction.begin();
+            LogContext.set(LogContext.TXID, messageId);
             handler.setRequestPath(path)
                     .setRequestId(messageId)
                     .setResponse(ctx.response())
@@ -61,12 +70,25 @@ class ApiHandler implements Handler<RoutingContext> {
                     .setQueryParams(ctx.queryParams())
                     .setRawBodyRequest(ctx.getBodyAsString())
                     .handle();
+            transaction.commit();
         } catch (Exception ex) {
             LOGGER.error("Process request to {} with id {} get error", path, messageId, ex);
             ctx.response().end(ResponseMessage.error(
                     HttpResponseStatus.INTERNAL_SERVER_ERROR.code(),
-                    ex != null ? ex.getMessage() : "Internal server error")
+                    !Validate.isEmpty(ex.getMessage()) ? ex.getMessage() : "Internal server error")
                     .json());
+            try {
+                transaction.rollback();
+            } catch (Exception e) {
+                LOGGER.error("rollback transaction get error ", e);
+            }
+        } finally {
+            try {
+                transaction.end();
+            } catch (Exception ex) {
+                LOGGER.error("end transaction get error ", ex);
+            }
+            LOGGER.info("process request to {} take {} ms", path, cw.timeElapsedMS());
         }
     }
 
