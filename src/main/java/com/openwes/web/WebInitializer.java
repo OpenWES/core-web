@@ -62,6 +62,7 @@ public class WebInitializer implements Initializer {
         if (workerSize <= 1) {
             workerSize = 1;
         }
+        workerSize = Math.max(Runtime.getRuntime().availableProcessors(), workerSize);
 
         String host = config.getString("host");
         if (Validate.isEmpty(host)) {
