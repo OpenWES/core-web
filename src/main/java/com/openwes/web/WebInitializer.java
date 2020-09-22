@@ -11,6 +11,7 @@ import com.openwes.core.utils.UniqId;
 import com.openwes.core.utils.Utils;
 import com.openwes.core.utils.Validate;
 import com.openwes.web.annotation.Api;
+import com.openwes.web.ratelimit.RateLimiter;
 import com.typesafe.config.Config;
 import io.netty.handler.codec.http.HttpResponseStatus;
 import io.vertx.core.AsyncResult;
@@ -46,6 +47,7 @@ public class WebInitializer implements Initializer {
     private final static Logger LOGGER = LoggerFactory.getLogger(WebInitializer.class);
 
     private Vertx vertx;
+    private RateLimiter rateLimiter;
 
     @Override
     public String configKey() {
@@ -114,9 +116,24 @@ public class WebInitializer implements Initializer {
                 });
 
         /**
+         * setup rate limiter
+         */
+        if (config.hasPath("rate-limiter")) {
+            String type = config.getString("rate-limiter.type");
+            int maxRequest = config.getInt("rate-limiter.max-request");
+            long duration = config.getInt("rate-limiter.duration");
+            if (duration <= 1000) {
+                duration = 1000;
+            }
+            rateLimiter = RateLimiter.create(type, maxRequest, duration);
+            rateLimiter.onStart(vertx);
+        }
+
+        /**
          * setup restful
          */
-        setupApi(config.getStringList("packages"),
+        setupApi(config.getString("prefix"),
+                config.getStringList("packages"),
                 router,
                 config.hasPath("process-timeout") ? config.getLong("process-timeout") : 0L);
 
@@ -135,7 +152,7 @@ public class WebInitializer implements Initializer {
 
         final int _port = port;
         final String _host = host;
-        CountDownLatch cdl = new CountDownLatch(0);
+        CountDownLatch cdl = new CountDownLatch(1);
         vertx.createHttpServer(httpServerOptions)
                 .requestHandler(router)
                 .exceptionHandler((Throwable e) -> {
@@ -150,18 +167,42 @@ public class WebInitializer implements Initializer {
                         cdl.countDown();
                     } else {
                         LOGGER.error("Start http protocol get exception ", e.cause());
-                        cdl.countDown();
                     }
                 });
+        if (!cdl.await(10, TimeUnit.SECONDS)) {
+            throw new RuntimeException("Can not create http listener");
+        }
         LOGGER.info("Binding HTTP{} listener at {}...", sslEnabled ? "S" : "", port);
     }
 
     @Override
     public void onShutdow(Config config) throws Exception {
+        if (rateLimiter != null) {
+            rateLimiter.onStop(vertx);
+            rateLimiter = null;
+        }
+
+        if (vertx != null) {
+            CountDownLatch cdl = new CountDownLatch(1);
+            vertx.close((AsyncResult<Void> event) -> {
+                if (event.succeeded()) {
+                    LOGGER.info("Shutdown vertx instance of http");
+                } else {
+                    LOGGER.error("shutting down vertx instance of http get exception", event.cause());
+                }
+                cdl.countDown();
+            });
+            cdl.await(30, TimeUnit.SECONDS);
+        }
     }
 
-    private void setupApi(List<String> packages, Router router, long timeoutInMs) throws Exception {
-        router.route("/*")
+    private void setupApi(String prefix, List<String> packages, Router router, long timeoutInMs) throws Exception {
+        String root = new PathBuilder()
+                .append(prefix)
+                .append("/*")
+                .normalise()
+                .toString();
+        router.route(root)
                 .handler(BodyHandler.create())
                 .handler((RoutingContext ctx) -> {
                     String messageId = UniqId.uniqId16Bytes();
