@@ -20,6 +20,9 @@ public interface RateLimiter extends Handler<RoutingContext> {
         if (type == null || maxRequest == 0) {
             return new NoRateLimiter();
         }
+        if (duration <= 1000) {
+            duration = 1000;
+        }
         if (NONE.equals(type)) {
             return new NoRateLimiter();
         }

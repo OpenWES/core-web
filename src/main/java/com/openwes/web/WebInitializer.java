@@ -11,6 +11,8 @@ import com.openwes.core.utils.UniqId;
 import com.openwes.core.utils.Utils;
 import com.openwes.core.utils.Validate;
 import com.openwes.web.annotation.Api;
+import com.openwes.web.annotation.RateLimiterStrategy;
+import com.openwes.web.ratelimit.NoRateLimiter;
 import com.openwes.web.ratelimit.RateLimiter;
 import com.typesafe.config.Config;
 import io.netty.handler.codec.http.HttpResponseStatus;
@@ -32,6 +34,7 @@ import io.vertx.ext.web.handler.BodyHandler;
 import io.vertx.ext.web.handler.CorsHandler;
 import io.vertx.ext.web.handler.TimeoutHandler;
 import java.lang.annotation.Annotation;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
@@ -46,8 +49,9 @@ public class WebInitializer implements Initializer {
 
     private final static Logger LOGGER = LoggerFactory.getLogger(WebInitializer.class);
 
+    private final NoRateLimiter noRateLimiter = new NoRateLimiter();
+    private final List<RateLimiter> rateLimiters = new ArrayList<>();
     private Vertx vertx;
-    private RateLimiter rateLimiter;
 
     @Override
     public String configKey() {
@@ -116,20 +120,6 @@ public class WebInitializer implements Initializer {
                 });
 
         /**
-         * setup rate limiter
-         */
-        if (config.hasPath("rate-limiter")) {
-            String type = config.getString("rate-limiter.type");
-            int maxRequest = config.getInt("rate-limiter.max-request");
-            long duration = config.getInt("rate-limiter.duration");
-            if (duration <= 1000) {
-                duration = 1000;
-            }
-            rateLimiter = RateLimiter.create(type, maxRequest, duration);
-            rateLimiter.onStart(vertx);
-        }
-
-        /**
          * setup restful
          */
         setupApi(config.getString("prefix"),
@@ -177,10 +167,10 @@ public class WebInitializer implements Initializer {
 
     @Override
     public void onShutdow(Config config) throws Exception {
-        if (rateLimiter != null) {
+        rateLimiters.forEach((rateLimiter) -> {
             rateLimiter.onStop(vertx);
-            rateLimiter = null;
-        }
+        });
+        rateLimiters.clear();
 
         if (vertx != null) {
             CountDownLatch cdl = new CountDownLatch(1);
@@ -202,6 +192,7 @@ public class WebInitializer implements Initializer {
                 .append("/*")
                 .normalise()
                 .toString();
+
         router.route(root)
                 .handler(BodyHandler.create())
                 .handler((RoutingContext ctx) -> {
@@ -278,8 +269,24 @@ public class WebInitializer implements Initializer {
         if (Validate.isEmpty(path)) {
             return;
         }
+
+        /**
+         * setup rate limiter
+         */
+        RateLimiter rateLimiter = null;
+        Annotation rateAnno = clzz.getDeclaredAnnotation(RateLimiterStrategy.class);
+        if (rateAnno instanceof RateLimiterStrategy) {
+            rateLimiter = RateLimiter.create(
+                    ((RateLimiterStrategy) rateAnno).type(),
+                    ((RateLimiterStrategy) rateAnno).maxRequest(),
+                    ((RateLimiterStrategy) rateAnno).duration()
+            );
+            rateLimiter.onStart(vertx);
+            rateLimiters.add(rateLimiter);
+        }
         router.route(method, path)
                 .useNormalisedPath(true)
+                .handler(rateLimiter != null ? rateLimiter : noRateLimiter)
                 .blockingHandler(ApiHandler.create(path, ci.getName()), false);
     }
 
