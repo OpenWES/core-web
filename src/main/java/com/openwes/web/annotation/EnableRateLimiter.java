@@ -11,11 +11,5 @@ import java.lang.annotation.Target;
  */
 @Target(ElementType.TYPE)
 @Retention(RetentionPolicy.RUNTIME)
-public @interface RateLimiterStrategy {
-
-    String type() default com.openwes.web.ratelimit.RateLimiter.NONE;
-
-    int maxRequest() default 0;
-
-    long duration() default 1000;
+public @interface EnableRateLimiter {
 }

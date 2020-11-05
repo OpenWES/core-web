@@ -10,10 +10,9 @@ import java.util.concurrent.atomic.AtomicInteger;
  * @author xuanloc0511@gmail.com
  *
  */
-public class MaxConcurrencyRateLimiter implements RateLimiter {
+public class MaxConcurrencyRateLimiter extends RequestCounter implements RateLimiter {
 
     private final int maxConcurrent;
-    private final AtomicInteger counter = new AtomicInteger(0);
 
     public MaxConcurrencyRateLimiter(int maxConcurrent) {
         this.maxConcurrent = maxConcurrent;
@@ -21,6 +20,12 @@ public class MaxConcurrencyRateLimiter implements RateLimiter {
 
     @Override
     public void handle(RoutingContext ctx) {
+        String endpoint = new StringBuilder()
+                .append(ctx.request().method())
+                .append(":")
+                .append(ctx.request().path())
+                .toString();
+        AtomicInteger counter = counterOfEndpoint(endpoint);
         if (counter.compareAndSet(maxConcurrent, maxConcurrent)) {
             ctx.fail(HttpResponseStatus.TOO_MANY_REQUESTS.code(), new RuntimeException("Number the request exceeds rate-limit configuration"));
             return;

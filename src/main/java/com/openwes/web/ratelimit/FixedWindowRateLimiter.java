@@ -10,9 +10,8 @@ import java.util.concurrent.atomic.AtomicInteger;
  * @author xuanloc0511@gmail.com
  *
  */
-public class FixedWindowRateLimiter implements RateLimiter {
+public class FixedWindowRateLimiter extends RequestCounter implements RateLimiter {
 
-    private final AtomicInteger counter = new AtomicInteger(0);
     private final int maxRequest;
     private final long windowSize;
     private long interval = 0;
@@ -24,6 +23,12 @@ public class FixedWindowRateLimiter implements RateLimiter {
 
     @Override
     public void handle(RoutingContext ctx) {
+        String endpoint = new StringBuilder()
+                .append(ctx.request().method())
+                .append(":")
+                .append(ctx.request().path())
+                .toString();
+        AtomicInteger counter = counterOfEndpoint(endpoint);
         if (counter.compareAndSet(maxRequest, maxRequest)) {
             ctx.fail(HttpResponseStatus.TOO_MANY_REQUESTS.code(), new RuntimeException("Number the request exceeds rate-limit configuration"));
             return;
@@ -35,7 +40,9 @@ public class FixedWindowRateLimiter implements RateLimiter {
     @Override
     public void onStart(Vertx vertx) {
         interval = vertx.setPeriodic(windowSize, (event) -> {
-            counter.set(0);
+            allCounters().forEach((endpoint, counter) -> {
+                counter.set(0);
+            });
         });
     }
 
