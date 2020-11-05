@@ -1,5 +1,6 @@
 package com.openwes.web;
 
+import com.openwes.core.IOC;
 import static com.openwes.core.IOC.init;
 import com.openwes.core.Transaction;
 import com.openwes.core.logging.LogContext;
@@ -44,7 +45,7 @@ class ApiHandler implements Handler<RoutingContext> {
 
         HttpHandler handler;
         try {
-            handler = ClassUtils.object(httpHandler);
+            handler = (HttpHandler) IOC.init(ClassUtils.load(httpHandler));
         } catch (ClassLoadException ex) {
             LOGGER.error("init http handler get error", ex);
             ctx.response().end(ResponseMessage.error(
