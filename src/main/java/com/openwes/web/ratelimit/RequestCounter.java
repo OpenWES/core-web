@@ -3,6 +3,8 @@ package com.openwes.web.ratelimit;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  *
@@ -10,10 +12,12 @@ import java.util.concurrent.atomic.AtomicInteger;
  */
 public class RequestCounter {
 
+    private final static Logger LOGGER = LoggerFactory.getLogger(RequestCounter.class);
     private final Map<String, AtomicInteger> counter = new HashMap<>();
     private final AtomicInteger zeroCounter = new AtomicInteger(0);
 
     public void registerEndpoint(String endpoint) {
+        LOGGER.info("Enable rate limiter for endpoint {}", endpoint);
         counter.put(endpoint, new AtomicInteger(0));
     }
 
