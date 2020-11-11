@@ -293,7 +293,7 @@ public class WebInitializer implements Initializer {
                         .append(method)
                         .append(":")
                         .append(path)
-                        .toString());
+                        .toString(), ((EnableRateLimiter) rateAnno).maxRequest());
             }
         }
         router.route(method, path)

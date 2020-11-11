@@ -26,7 +26,8 @@ public class MaxConcurrencyRateLimiter extends RequestCounter implements RateLim
                 .append(ctx.request().path())
                 .toString();
         AtomicInteger counter = counterOfEndpoint(endpoint);
-        if (counter.compareAndSet(maxConcurrent, maxConcurrent)) {
+        int max = maxRequestOf(endpoint, maxConcurrent);
+        if (counter.compareAndSet(max, max)) {
             ctx.fail(HttpResponseStatus.TOO_MANY_REQUESTS.code(), new RuntimeException("Number the request exceeds rate-limit configuration"));
             return;
         }

@@ -31,7 +31,8 @@ public class ThrottleRateLimiter extends RequestCounter implements RateLimiter {
                 .toString();
         AtomicInteger counter = counterOfEndpoint(endpoint);
         final int i = currentToken.get();
-        if (counter.compareAndSet(maxRequest, maxRequest)) {
+        int max = maxRequestOf(endpoint, maxRequest);
+        if (counter.compareAndSet(max, max)) {
             ctx.fail(HttpResponseStatus.TOO_MANY_REQUESTS.code(), new RuntimeException("Number the request exceeds rate-limit configuration"));
             return;
         }

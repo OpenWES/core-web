@@ -10,9 +10,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * 
+ *
  * @author xuanloc0511@gmail.com
- * 
+ *
  */
 public abstract class HttpHandler extends HttpParams {
 
@@ -85,7 +85,7 @@ public abstract class HttpHandler extends HttpParams {
         return pathParams;
     }
 
-    protected final void response(ResponseMessage obj) {
+    protected final void response(Object obj) {
         if (response == null) {
             return;
         }
@@ -97,7 +97,12 @@ public abstract class HttpHandler extends HttpParams {
                 response.end(ResponseMessage.success(HttpResponseStatus.OK.code(), "OK", null).json());
                 return;
             }
-            String payload = obj.json();
+            String payload;
+            if (obj instanceof ResponseMessage) {
+                payload = ((ResponseMessage) obj).json();
+            } else {
+                payload = Utils.marshal(obj);
+            }
             LOGGER.info("Response of request to {} with id {} is {}", requestPath, requestId, payload);
             response.end(payload);
         } catch (Exception ex) {
